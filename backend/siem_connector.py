@@ -1,9 +1,34 @@
 from elasticsearch import Elasticsearch
+from datetime import datetime, timedelta
 
 es = Elasticsearch("http://localhost:9200")
 
 
-def search_events(event=None, protocol=None, user=None):
+def build_time_filter(time_range):
+    if time_range == "last_24h":
+        return {
+            "range": {
+                "@timestamp": {
+                    "gte": "now-24h",
+                    "lte": "now"
+                }
+            }
+        }
+
+    if time_range == "yesterday":
+        return {
+            "range": {
+                "@timestamp": {
+                    "gte": "now-1d/d",
+                    "lt": "now/d"
+                }
+            }
+        }
+
+    return None
+
+
+def search_events(event=None, protocol=None, user=None, time_range=None):
     must_clauses = []
 
     if event:
@@ -15,19 +40,21 @@ def search_events(event=None, protocol=None, user=None):
     if user:
         must_clauses.append({"match": {"user.name": user}})
 
+    time_filter = build_time_filter(time_range)
+    if time_filter:
+        must_clauses.append(time_filter)
+
     query = {
-        "query": {
-            "bool": {
-                "must": must_clauses
-            }
+        "bool": {
+            "must": must_clauses
         }
     }
 
-    response = es.search(index="soc-logs", query=query["query"])
+    response = es.search(index="soc-logs", query=query)
     return response["hits"]["hits"]
 
 
-def get_top_attackers():
+def get_top_attackers(threshold=0):
     response = es.search(
         index="soc-logs",
         size=0,
@@ -45,4 +72,9 @@ def get_top_attackers():
         }
     )
 
-    return response["aggregations"]["top_attackers"]["buckets"]
+    buckets = response["aggregations"]["top_attackers"]["buckets"]
+
+    # Apply threshold filtering
+    filtered = [b for b in buckets if b["doc_count"] > threshold]
+
+    return filtered

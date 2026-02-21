@@ -13,9 +13,10 @@ def root():
 def dynamic_search(
     event: str = Query(None),
     protocol: str = Query(None),
-    user: str = Query(None)
+    user: str = Query(None),
+    time_range: str = Query(None)
 ):
-    results = search_events(event, protocol, user)
+    results = search_events(event, protocol, user, time_range)
 
     formatted = []
     for hit in results:
@@ -36,9 +37,10 @@ def dynamic_search(
 
 
 @app.get("/top-attackers")
-def top_attackers():
-    buckets = get_top_attackers()
+def top_attackers(threshold: int = Query(0)):
+    attackers = get_top_attackers(threshold)
 
     return {
-        "attackers": buckets
+        "threshold": threshold,
+        "attackers": attackers
     }

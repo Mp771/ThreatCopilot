@@ -1,0 +1,47 @@
+[
+  {
+    "@timestamp": "2026-02-17T08:00:00",
+    "event.action": "failure",
+    "event.category": "authentication",
+    "source.ip": "185.220.101.1",
+    "user.name": "admin",
+    "network.protocol": "vpn",
+    "host.name": "server-1"
+  },
+  {
+    "@timestamp": "2026-02-17T08:05:00",
+    "event.action": "failure",
+    "event.category": "authentication",
+    "source.ip": "185.220.101.1",
+    "user.name": "admin",
+    "network.protocol": "vpn",
+    "host.name": "server-1"
+  },
+  {
+    "@timestamp": "2026-02-17T08:07:00",
+    "event.action": "failure",
+    "event.category": "authentication",
+    "source.ip": "185.220.101.1",
+    "user.name": "admin",
+    "network.protocol": "vpn",
+    "host.name": "server-1"
+  },
+  {
+    "@timestamp": "2026-02-17T09:00:00",
+    "event.action": "success",
+    "event.category": "authentication",
+    "source.ip": "192.168.1.5",
+    "user.name": "john",
+    "network.protocol": "ssh",
+    "host.name": "server-2"
+  },
+  {
+    "@timestamp": "2026-02-17T11:00:00",
+    "event.action": "malware_detected",
+    "event.category": "malware",
+    "source.ip": "10.0.0.4",
+    "user.name": "alice",
+    "network.protocol": "http",
+    "host.name": "endpoint-1"
+  }
+]

@@ -15,6 +15,19 @@ def generate_summary(results):
 
     return f"{count} events detected involving {len(ips)} unique IP address(es)."
 
+@router.get("/welcome")
+def welcome_message():
+    return {
+        "message": (
+            "👋 Hi, I'm ThreatCopilot.\n"
+            "I help you investigate security logs using natural language.\n"
+            "You can try commands like:\n"
+            "• Show failed vpn logins\n"
+            "• Show brute force attempts more than 2\n"
+            "• Show ssh failures yesterday\n"
+            "• Show malware detected events"
+        )
+    }
 
 @router.post("/nlp")
 def nlp_search(payload: NLPQuery, session_id: str = Query("default")):

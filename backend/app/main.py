@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.routes import logs, nlp
 from fastapi.middleware.cors import CORSMiddleware
+from app.routes import report
 
 app = FastAPI(title="ThreatCopilot API")
 app.add_middleware(
@@ -13,7 +14,7 @@ app.add_middleware(
 # Include route modules
 app.include_router(logs.router)
 app.include_router(nlp.router)
-
+app.include_router(report.router)
 
 
 @app.get("/")

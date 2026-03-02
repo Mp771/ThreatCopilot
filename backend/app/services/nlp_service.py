@@ -12,6 +12,21 @@ USE_GEMINI = os.getenv("USE_GEMINI", "false").lower() == "true"
 client = genai.Client(api_key=API_KEY) if API_KEY and USE_GEMINI else None
 SESSION_CONTEXT = {}
 
+# Simple greetings
+GREETINGS = {"hi", "hello", "hey", "good morning", "good evening"}
+
+
+def is_chat_query(query: str):
+    q = query.lower().strip()
+
+    if q in GREETINGS:
+        return True
+
+    if len(q.split()) <= 2 and q not in ["vpn", "ssh", "malware"]:
+        return True
+
+    return False
+
 
 def rule_based_parser(nl_query: str, previous: dict):
     nl_query = nl_query.lower()
@@ -34,7 +49,7 @@ def rule_based_parser(nl_query: str, previous: dict):
 
     if "yesterday" in nl_query:
         structured["time_range"] = "yesterday"
-    
+
     if "brute" in nl_query:
         structured["event"] = "failure"
 
@@ -50,17 +65,18 @@ def llm_parse(nl_query: str):
         return None
 
     prompt = f"""
-    You are a SOC investigation assistant.
-    Convert the following query into STRICT JSON.
+You are a SOC investigation assistant.
 
-    Required keys:
-    event, protocol, user, time_range, threshold
+Convert the following query into STRICT JSON.
 
-    If unknown, use null.
+Required keys:
+event, protocol, user, time_range, threshold
 
-    Query:
-    {nl_query}
-    """
+If unknown use null.
+
+Query:
+{nl_query}
+"""
 
     try:
         response = client.models.generate_content(
@@ -68,25 +84,29 @@ def llm_parse(nl_query: str):
             contents=prompt
         )
 
-        candidates = response.candidates
-
-        if not candidates:
+        if not response.candidates:
             return None
 
-        first_candidate = candidates[0]
-
-        if not first_candidate.content or not first_candidate.content.parts:
+        content = response.candidates[0].content
+        if not content or not content.parts:
             return None
 
-        part = first_candidate.content.parts[0]
+        part = content.parts[0]
 
-        if not hasattr(part, "text") or not part.text:
+        if not hasattr(part, "text"):
             return None
 
         raw_text = part.text
 
+        if not raw_text:
+            return None
+
         start = raw_text.find("{")
         end = raw_text.rfind("}") + 1
+
+        if start == -1 or end == -1:
+            return None
+
         json_text = raw_text[start:end]
 
         return json.loads(json_text)
@@ -97,6 +117,7 @@ def llm_parse(nl_query: str):
 
 
 def normalize_event(event: str | None):
+
     if not event:
         return None
 
@@ -115,6 +136,15 @@ def normalize_event(event: str | None):
 
 
 def parse_query(nl_query: str, session_id: str = "default"):
+
+    # Detect greeting / non-investigation query
+    if is_chat_query(nl_query):
+
+        return {
+            "intent": "chat",
+            "message": "Hello! Ask me about security events like VPN failures or brute force attempts."
+        }
+
     previous = SESSION_CONTEXT.get(session_id, {
         "event": None,
         "protocol": None,
@@ -130,10 +160,8 @@ def parse_query(nl_query: str, session_id: str = "default"):
     else:
         structured = rule_based_parser(nl_query, previous)
 
-    # 🔥 Normalize event AFTER merging
     structured["event"] = normalize_event(structured.get("event"))
 
-    # 🔥 Force threshold to int safely
     if structured.get("threshold") is not None:
         try:
             structured["threshold"] = int(structured["threshold"])
@@ -141,5 +169,7 @@ def parse_query(nl_query: str, session_id: str = "default"):
             structured["threshold"] = None
 
     SESSION_CONTEXT[session_id] = structured
+
+    structured["intent"] = "investigation"
 
     return structured

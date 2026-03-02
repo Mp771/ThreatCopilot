@@ -11,7 +11,7 @@ def generate_summary(results):
         return "No suspicious activity detected."
 
     count = len(results)
-    ips = list(set([r["source_ip"] for r in results]))
+    ips = list(set([r.get("source_ip") for r in results if r.get("source_ip")]))
 
     return f"{count} events detected involving {len(ips)} unique IP address(es)."
 
@@ -31,23 +31,40 @@ def welcome_message():
 
 @router.post("/nlp")
 def nlp_search(payload: NLPQuery, session_id: str = Query("default")):
+
     parsed = parse_query(payload.query, session_id=session_id)
 
-    if parsed["threshold"] is not None:
-        attackers = get_top_attackers(parsed["threshold"])
+    # Handle greeting / chat queries
+    if parsed.get("intent") == "chat":
+        return {
+            "summary": parsed["message"],
+            "events": [],
+            "timeline": []
+        }
+
+    # Handle threshold queries
+    threshold = parsed.get("threshold")
+
+    if threshold is not None:
+        attackers = get_top_attackers(int(threshold))
+
         return {
             "parsed_intent": parsed,
             "attackers": attackers
         }
 
+    # Normal investigation search
     results = search_events(
-        event=parsed["event"],
-        protocol=parsed["protocol"],
-        user=parsed["user"],
-        time_range=parsed["time_range"]
+        event=parsed.get("event"),
+        protocol=parsed.get("protocol"),
+        user=parsed.get("user"),
+        time_range=parsed.get("time_range")
     )
 
     summary = generate_summary(results)
+    from app.services.history_service import save_investigation
+
+    save_investigation(payload.query, summary, results)
 
     return {
         "parsed_intent": parsed,

@@ -1,14 +1,15 @@
 from fastapi import APIRouter
-from siem_connector import search_events
+from pydantic import BaseModel
 from app.services.report_generator import generate_report
 
 router = APIRouter()
 
+class ReportRequest(BaseModel):
+    events: list
+
 @router.post("/generate-report")
-def create_report():
+def create_report(data: ReportRequest):
 
-    events = search_events(event="failure")
-
-    report = generate_report(events)
+    report = generate_report(data.events)
 
     return {"report": report}

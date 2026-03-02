@@ -1,37 +1,76 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
-export default function HistoryPanel() {
+export default function HistoryPanel({ onLoadInvestigation }) {
 
-  const [cases, setCases] = useState([]);
+  const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    axios.get("http://127.0.0.1:8000/history")
-      .then(res => setCases(res.data));
+
+    const fetchHistory = async () => {
+      try {
+
+        const res = await axios.get("http://127.0.0.1:8000/history");
+
+        setHistory(res.data.history || []);
+
+      } catch (err) {
+
+        console.error("History fetch failed", err);
+
+      }
+    };
+
+    fetchHistory();
+
   }, []);
+
+  const loadInvestigation = async (id) => {
+
+    try {
+
+      const res = await axios.get(`http://127.0.0.1:8000/history/${id}`);
+
+      if (onLoadInvestigation) {
+        onLoadInvestigation(res.data);
+      }
+
+    } catch (err) {
+
+      console.error("Failed to load investigation", err);
+
+    }
+
+  };
 
   return (
 
-    <div className="w-[260px] border border-cyber-green/30 bg-black/40 rounded p-3 font-mono text-sm overflow-y-auto">
+    <div className="w-[260px] bg-black/40 border border-cyber-green/30 rounded p-3 font-mono text-sm overflow-y-auto">
 
-      <div className="text-cyber-green mb-3">
+      <h2 className="text-cyber-green mb-3 font-semibold">
         Investigation History
-      </div>
+      </h2>
 
-      {cases.map(c => (
+      {history.length === 0 && (
+        <div className="text-slate-400 text-xs">
+          No investigations yet
+        </div>
+      )}
 
-        <div key={c.case_id} className="mb-3 border-b border-cyber-green/20 pb-2">
+      {history.map((item) => (
+
+        <div
+          key={item.id}
+          onClick={() => loadInvestigation(item.id)}
+          className="p-2 mb-2 border border-cyber-green/20 rounded cursor-pointer hover:bg-cyber-green/10 transition"
+        >
 
           <div className="text-cyber-cyan text-xs">
-            Case #{c.case_id}
+            {new Date(item.created_at).toLocaleString()}
           </div>
 
-          <div className="text-slate-300">
-            {c.query}
-          </div>
-
-          <div className="text-xs text-slate-500">
-            {c.events} events
+          <div className="text-slate-200 truncate">
+            {item.query}
           </div>
 
         </div>
@@ -41,4 +80,5 @@ export default function HistoryPanel() {
     </div>
 
   );
+
 }

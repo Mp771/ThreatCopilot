@@ -1,229 +1,332 @@
 # 🛡️ ThreatCopilot – AI-Powered SOC Investigation Assistant
 
-ThreatCopilot is an AI-assisted Security Operations Center (SOC) investigation system that enables analysts to query security logs using natural language.
-It combines log analytics, NLP parsing, MITRE ATT&CK enrichment, and conversational UI to streamline threat investigation workflows.
+🚀 ThreatCopilot is an AI-powered Security Operations Center (SOC) investigation platform that helps security analysts detect, investigate, and understand security threats through automated detection, MITRE ATT&CK mapping, evidence collection, and AI-assisted analysis.
+
+Built using **FastAPI, Elasticsearch, PostgreSQL, and React**, ThreatCopilot provides an end-to-end workflow for threat detection and incident investigation.
 
 ---
 
-## 🚀 Features
+## ✨ Features
 
-* Natural language log querying
-* Multi-turn conversational context
-* Elasticsearch dynamic filtering
-* Aggregation for top attackers
-* MITRE ATT&CK technique enrichment
-* Demo mode for portfolio showcase
-* Optional Gemini LLM integration
-* Chat-style frontend interface
+### 🌐 Network Monitoring
+
+* Capture live network connections
+* Collect endpoint network telemetry
+* Store events in Elasticsearch
+* Monitor network activity in real time
+
+### 🚨 Threat Detection Engine
+
+* Behavioral detection rules
+* High Connection Volume detection
+* Automated alert generation
+* Severity-based classification
+
+### 🔍 Investigation Engine
+
+* Alert investigation workflow
+* MITRE ATT&CK mapping
+* Evidence collection
+* Automated threat summaries
+* Analyst recommendations
+
+### 🤖 AI-Assisted Analysis
+
+* Threat explanation generation
+* Context-aware investigation summaries
+* Analyst-friendly incident insights
+* Investigation recommendations
+
+### 📊 Alert Management
+
+* PostgreSQL-backed alert storage
+* Investigation history tracking
+* Alert retrieval APIs
+* Investigation session management
+
+### 💻 SOC Dashboard
+
+* Interactive analyst terminal
+* Investigation history panel
+* Incident report generation
+* Modern cybersecurity-inspired UI
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Architecture
 
+```text
+                     🌐 Network Traffic
+                              │
+                              ▼
+                    📡 Network Monitor
+                              │
+                              ▼
+                    🔎 Elasticsearch
+                              │
+                              ▼
+                   🚨 Detection Engine
+                              │
+                              ▼
+                   🗄️ PostgreSQL Alerts
+                              │
+                              ▼
+                 🕵️ Investigation Engine
+                              │
+            ┌─────────────────┼─────────────────┐
+            ▼                 ▼                 ▼
+     🗺️ MITRE Mapper    📑 Evidence      🤖 AI Analysis
+                           Collector
+            └─────────────────┼─────────────────┘
+                              ▼
+                  💻 ThreatCopilot Dashboard
+                              │
+                              ▼
+                    📄 SOC Incident Reports
 ```
-Frontend (Chat UI)
-│
-▼
-FastAPI Backend
-│
-├── NLP Layer
-│   ├── Rule-Based Parser
-│   └── Gemini LLM (Optional)
-│
-├── Session Context Memory
-│
-├── Elasticsearch Service
-│   ├── Search Queries
-│   └── Aggregations (Top Attackers)
-│
-└── MITRE Enrichment Layer
-│
-▼
-Elasticsearch Index (soc-logs)
-```
+
+---
+
+## 🛠️ Tech Stack
+
+### Backend ⚙️
+
+* FastAPI
+* Python
+* Uvicorn
+
+### Databases 🗄️
+
+* PostgreSQL
+* Elasticsearch
+
+### Frontend 🎨
+
+* React
+* Vite
+* Tailwind CSS
+
+### Security 🔐
+
+* MITRE ATT&CK Framework
+* Detection Engineering
+* Threat Investigation
+* Network Monitoring
 
 ---
 
 ## 📂 Project Structure
 
-```
+```text
 backend/
 │
 ├── app/
-│   ├── core/
+│   ├── auth/
 │   ├── routes/
-│   │   └── nlp.py
+│   │   ├── auth.py
+│   │   ├── history.py
+│   │   ├── network.py
+│   │   └── logs.py
+│   │
 │   ├── services/
-│   │   ├── elastic_service.py
-│   │   └── nlp_service.py
+│   │   ├── network_monitor.py
+│   │   ├── detection_engine.py
+│   │   ├── alert_service.py
+│   │   ├── alert_analyzer.py
+│   │   ├── evidence_collector.py
+│   │   ├── mitre_mapper.py
+│   │   ├── ai_investigator.py
+│   │   └── report_generator.py
+│   │
 │   ├── schemas/
-│   └── main.py
+│   ├── db/
+│   └── core/
 │
-├── frontend/
-├── .env
-└── demo_data/
+└── frontend/
+    ├── src/
+    │   ├── components/
+    │   ├── App.jsx
+    │   └── main.jsx
+    └── public/
 ```
 
 ---
 
-## ⚙️ Tech Stack
+## 🔄 Investigation Workflow
 
-* Python 3.13
-* FastAPI
-* Elasticsearch 8.x
-* Uvicorn
-* Gemini API (Optional)
-* Vite + Vanilla JavaScript frontend
+### 1️⃣ Capture Network Activity
+
+```http
+POST /network/capture
+```
+
+Collects live network connections and stores them in Elasticsearch.
 
 ---
 
-## 🧠 How It Works
+### 2️⃣ Analyze Network Activity
 
-1. User submits a natural language query.
-2. NLP layer converts it into structured JSON intent.
-3. Event normalization ensures schema alignment.
-4. Elasticsearch DSL query is generated.
-5. Results are enriched with MITRE ATT&CK techniques.
-6. Structured summary is returned to the frontend.
+```http
+POST /network/analyze
+```
+
+Applies detection rules and generates security alerts.
 
 ---
 
-## 🔍 Example Queries
+### 3️⃣ Retrieve Alerts
 
+```http
+GET /network/alerts
 ```
-Show failed VPN logins
-Show brute force attempts more than 2
-Show SSH failures yesterday
-Show malware detected events
+
+Fetches alerts stored in PostgreSQL.
+
+---
+
+### 4️⃣ Investigate an Alert
+
+```http
+GET /network/investigate/{alert_id}
+```
+
+Performs:
+
+✅ Alert Retrieval
+✅ MITRE ATT&CK Mapping
+✅ Evidence Collection
+✅ Threat Analysis
+✅ Recommendation Generation
+
+### Example Response
+
+```json
+{
+  "alert_type": "High Connection Volume",
+  "severity": "MEDIUM",
+  "mitre_id": "T1046",
+  "mitre_name": "Network Service Discovery",
+  "tactic": "Discovery",
+  "connection_count": 18,
+  "summary": "Source IP 8.8.8.8 generated 18 network connections. This activity maps to MITRE ATT&CK T1046.",
+  "recommendation": [
+    "Review the owning process",
+    "Check destination reputation",
+    "Investigate related network activity"
+  ]
+}
 ```
 
 ---
 
-## 🛠️ Installation
+## 🗺️ MITRE ATT&CK Integration
 
-### 1️⃣ Clone Repository
+ThreatCopilot maps detected behaviors to MITRE ATT&CK techniques to provide investigation context.
 
+| Alert Type             | Technique                         | Tactic    |
+| ---------------------- | --------------------------------- | --------- |
+| High Connection Volume | T1046 – Network Service Discovery | Discovery |
+
+---
+
+## 🚀 Getting Started
+
+### 📥 Clone Repository
+
+```bash
+git clone https://github.com/Mp771/siem-threat-copilot.git
+cd siem-threat-copilot
 ```
-git clone https://github.com/your-username/threatcopilot.git
-cd threatcopilot/backend
-```
 
-### 2️⃣ Create Virtual Environment
+---
 
-**Windows**
+### ⚙️ Backend Setup
 
-```
+```bash
+cd backend
+
 python -m venv venv
+
+# Windows
 venv\Scripts\activate
-```
 
-**Linux / macOS**
-
-```
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3️⃣ Install Dependencies
-
-```
 pip install -r requirements.txt
-```
 
-### 4️⃣ Setup `.env`
-
-```
-ELASTIC_URL=http://localhost:9200
-INDEX_NAME=soc-logs
-USE_GEMINI=false
-DEMO_MODE=true
-GEMINI_API_KEY=your_key_if_needed
-```
-
-### 5️⃣ Run Backend
-
-```
 uvicorn app.main:app --reload
 ```
 
-### 6️⃣ Run Frontend
+Backend:
 
+```text
+http://127.0.0.1:8000
 ```
+
+Swagger API Docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+---
+
+### 🎨 Frontend Setup
+
+```bash
 cd frontend
+
 npm install
+
 npm run dev
 ```
 
----
+Frontend:
 
-## 🧪 Demo Mode
-
-If `DEMO_MODE=true`:
-
-* Time filters disabled
-* Static demo dataset used
-* Ideal for GitHub demos and portfolio showcase
-
----
-
-## 🤖 Optional Gemini LLM Integration
-
-Enable LLM parsing:
-
-```
-USE_GEMINI=true
-GEMINI_API_KEY=your_key
-```
-
-Model used:
-
-```
-gemini-2.5-flash
-```
-
-If disabled, system falls back to rule-based parsing.
-
----
-
-## 🎯 MITRE ATT&CK Mapping
-
-| Event Type       | MITRE Technique        |
-| ---------------- | ---------------------- |
-| failure          | T1110 – Brute Force    |
-| malware_detected | T1204 – User Execution |
-
----
-
-## 📊 Sample Output
-
-```
-3 events detected involving 1 unique IP address(es).
-
-MITRE: T1110 – Brute Force
+```text
+http://localhost:5173
 ```
 
 ---
 
-## 🔐 Security Considerations
+## 📈 Current Capabilities
 
-* Keyword fields used for Elasticsearch aggregations
-* Fielddata disabled to avoid memory overhead
-* API keys stored via environment variables
-* Demo mode prevents dependency on live logs
-
----
-
-## 📌 Future Enhancements
-
-* Severity scoring engine
-* Risk scoring model
-* Timeline visualization
-* Anomaly detection module
-* Automated SOC report generation
-* Security dashboard
+✅ Network Connection Monitoring
+✅ Elasticsearch Integration
+✅ Detection Engine
+✅ Alert Generation
+✅ PostgreSQL Alert Storage
+✅ MITRE ATT&CK Mapping
+✅ Evidence Collection
+✅ Investigation Workflows
+✅ Analyst Recommendations
+✅ React Dashboard
 
 ---
+
+## 🔮 Future Enhancements
+
+* 🚨 Port Scan Detection
+* 🔑 Brute Force Detection
+* 📡 Beaconing Detection
+* 🌍 Threat Intelligence Enrichment
+* 🦠 VirusTotal Integration
+* 🛑 AbuseIPDB Integration
+* ⏱️ Timeline Reconstruction
+* 📄 PDF Incident Reports
+* 👥 Role-Based Access Control (RBAC)
+* 🧠 LLM-Powered Threat Analysis
+
+
 
 ## 👨‍💻 Author
 
-AI-powered SOC automation prototype built for security analytics, threat investigation, and intelligent log analysis workflows.
+**Mannat Pal**
+
+🎯 Cybersecurity Enthusiast
+🛡️ SOC Analyst & Detection Engineering
+🔬 Malware Analysis & Threat Hunting
+
+🔗 GitHub: https://github.com/Mp771
+
+---
+
+⭐ If you found this project useful, consider giving it a star!

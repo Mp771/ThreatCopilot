@@ -1,3 +1,5 @@
+from fastapi import Depends
+from app.auth.dependencies import get_current_user
 from fastapi import APIRouter
 from app.services.history_service import (
     get_investigations,
@@ -8,7 +10,9 @@ router = APIRouter()
 
 
 @router.get("/history")
-def investigation_history():
+def get_history(
+    current_user=Depends(get_current_user)
+):
 
     investigations = get_investigations()
 

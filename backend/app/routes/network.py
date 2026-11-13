@@ -152,31 +152,44 @@ def investigate_alert(alert_id: int):
         "severity": row[1],
         "alert_type": row[2],
         "source_ip": row[3],
-        "description": row[4]
+        "description": row[4],
+        "created_at": row[5],
+        "connection_count": row[6]
     }
 
     result = explain_alert(alert)
+    result["summary"] = (
+    f"Source IP {alert['source_ip']} generated "
+    f"{alert['connection_count']} network connections. "
+    f"This activity maps to MITRE ATT&CK "
+    f"{result['mitre_id']} ({result['mitre_name']}) "
+    f"under the {result['tactic']} tactic."
+)
 
     evidence = collect_evidence(
         alert["source_ip"]
     )
 
     return InvestigationResponse(
-    alert_type=result["alert_type"],
-    severity=result["severity"],
+        alert_type=result["alert_type"],
+        severity=result["severity"],
+        mitre_id=result["mitre_id"],
+        mitre_name=result["mitre_name"],
+        tactic=result["tactic"],
 
-    mitre_id=result["mitre_id"],
-    mitre_name=result["mitre_name"],
-    tactic=result["tactic"],
+        # Keep the original alert count distinct from retrieved evidence.
+        connection_count=alert["connection_count"],
+        unique_destinations=evidence["unique_destinations"],
+        top_ports=evidence["top_ports"],
+        top_destinations=evidence["top_destinations"],
 
-    connection_count=evidence["connection_count"],
-    unique_destinations=evidence["unique_destinations"],
+        summary=result["summary"],
+        recommendation=result["recommendation"],
 
-    top_ports=evidence["top_ports"],
-    top_destinations=evidence["top_destinations"],
+        status_counts=evidence["status_counts"],
+        excluded_events=evidence["excluded_events"],
+        retrieval_method=evidence["retrieval_method"],
 
-    summary=result["summary"],
-
-    recommendation=result["recommendation"]
-)
-    
+        # Return up to 10 records, retaining their source IDs and timestamps.
+        evidence_events=evidence["events"][:10],
+    )

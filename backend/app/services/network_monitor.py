@@ -1,21 +1,21 @@
+
 import psutil
-from datetime import datetime
+from datetime import datetime, timezone
+
 from app.services.es_network import store_connection
 
+
 def capture_connections():
-
     for conn in psutil.net_connections(kind="inet"):
-
         try:
-
             document = {
-                "@timestamp": datetime.utcnow().isoformat(),
+                "@timestamp": datetime.now(timezone.utc).isoformat(),
                 "local_ip": conn.laddr.ip if conn.laddr else None,
                 "local_port": conn.laddr.port if conn.laddr else None,
                 "remote_ip": conn.raddr.ip if conn.raddr else None,
                 "remote_port": conn.raddr.port if conn.raddr else None,
                 "status": conn.status,
-                "pid": conn.pid
+                "pid": conn.pid,
             }
 
             store_connection(document)

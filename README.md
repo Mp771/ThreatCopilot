@@ -136,7 +136,9 @@ backend/
 │   │   ├── evidence_collector.py
 │   │   ├── mitre_mapper.py
 │   │   ├── ai_investigator.py
-│   │   └── report_generator.py
+│   │   ├── report_generator.py
+│   │   └── ingestion/
+│   │       └── lanl_comparison.py
 │   │
 │   ├── schemas/
 │   ├── db/
@@ -299,6 +301,23 @@ http://localhost:5173
 ✅ Investigation Workflows
 ✅ Analyst Recommendations
 ✅ React Dashboard
+
+---
+
+## 🧪 LANL Dataset Comparison Utilities
+
+The backend includes offline helpers in
+`backend/app/services/ingestion/lanl_comparison.py` for preparing and comparing
+LANL event data. They provide:
+
+* Day and hour grouping from event timestamps
+* A strict temporal train/test separation check
+* Detection of prior positive events sharing a source user, source computer, or
+  destination computer within a configurable time window (one hour by default)
+* Reproducible random sampling with a configurable seed
+
+These are data-processing utilities for evaluation workflows; they do not add a
+new API endpoint or change the live alert investigation workflow.
 
 ---
 

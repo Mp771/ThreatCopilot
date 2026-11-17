@@ -1,3 +1,4 @@
+
 from typing import Any
 
 from pydantic import BaseModel
@@ -11,7 +12,12 @@ class InvestigationResponse(BaseModel):
     mitre_name: str
     tactic: str
 
+    # Original count reported by the detection engine.
     connection_count: int
+
+    # Number of matching records retrieved from Elasticsearch.
+    evidence_connection_count: int
+
     unique_destinations: int
     top_ports: list[int]
     top_destinations: list[str]
@@ -19,7 +25,7 @@ class InvestigationResponse(BaseModel):
     summary: str
     recommendation: list[str]
 
-    # Evidence provenance and observed connection states
+    # Evidence provenance and observed connection states.
     status_counts: dict[str, int]
     excluded_events: int
     retrieval_method: str

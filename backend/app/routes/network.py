@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from app.services.network_monitor import capture_connections
 from elasticsearch import Elasticsearch
@@ -28,12 +29,24 @@ def run_capture():
         "message": "Connections captured"
     }
 
+
 @router.post("/analyze")
 def analyze_network():
 
     response = es.search(
         index="live-network",
-        size=500
+        size=500,
+        query={
+            "range": {
+                "@timestamp": {
+                    "gte": "now-5m",
+                    "lte": "now"
+                }
+            }
+        },
+        sort=[
+            {"@timestamp": {"order": "desc"}}
+        ]
     )
 
     connections = [
@@ -41,16 +54,50 @@ def analyze_network():
         for hit in response["hits"]["hits"]
     ]
 
-    alerts = detect_suspicious_connections(
-        connections
-    )
+    alerts = detect_suspicious_connections(connections)
+
+    event_times = []
+
+    for connection in connections:
+        raw_timestamp = connection.get("@timestamp")
+
+        if not raw_timestamp:
+            continue
+
+        try:
+            timestamp = datetime.fromisoformat(
+                raw_timestamp.replace("Z", "+00:00")
+            )
+
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(
+                    tzinfo=timezone.utc
+                )
+
+            event_times.append(timestamp)
+
+        except (ValueError, TypeError):
+            continue
+
+    window_start = min(event_times) if event_times else None
+    window_end = max(event_times) if event_times else None
+
+    saved_alerts = []
 
     for alert in alerts:
-        save_alert(alert)
+        alert_id = save_alert(alert)
+
+        saved_alerts.append({
+            **alert,
+            "id": alert_id
+        })
 
     return {
-        "alerts_found": len(alerts),
-        "alerts": alerts
+        "events_analyzed": len(connections),
+        "alerts_found": len(saved_alerts),
+        "detection_window_start": window_start,
+        "detection_window_end": window_end,
+        "alerts": saved_alerts
     }
 
 
@@ -87,18 +134,21 @@ def get_alerts():
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT
+    SELECT
         id,
         severity,
         alert_type,
         source_ip,
         description,
         created_at,
-        connection_count
+        connection_count,
+        destination_ip,
+        window_start,
+        window_end
     FROM alerts
     ORDER BY created_at DESC
     LIMIT 50
-    """)
+""")
 
     rows = cur.fetchall()
 
@@ -113,7 +163,10 @@ def get_alerts():
         source_ip=row[3],
         description=row[4],
         created_at=row[5],
-        connection_count=row[6]
+        connection_count=row[6],
+	    destination_ip=row[7],
+        window_start=row[8],
+        window_end=row[9]
     )
     for row in rows
 ]
@@ -128,13 +181,23 @@ def investigate_alert(alert_id: int):
     cur = conn.cursor()
 
     cur.execute(
-        """
-        SELECT *
-        FROM alerts
-        WHERE id=%s
-        """,
-        (alert_id,)
-    )
+    """
+    SELECT
+        id,
+        severity,
+        alert_type,
+        source_ip,
+        description,
+        created_at,
+        connection_count,
+        destination_ip,
+        window_start,
+        window_end
+    FROM alerts
+    WHERE id = %s
+    """,
+    (alert_id,)
+  )
 
     row = cur.fetchone()
 
@@ -154,21 +217,25 @@ def investigate_alert(alert_id: int):
         "source_ip": row[3],
         "description": row[4],
         "created_at": row[5],
-        "connection_count": row[6]
+        "connection_count": row[6],
+        "destination_ip": row[7],
+        "window_start": row[8],
+        "window_end": row[9],
     }
 
     result = explain_alert(alert)
     result["summary"] = (
     f"Source IP {alert['source_ip']} generated "
     f"{alert['connection_count']} network connections. "
-    f"This activity maps to MITRE ATT&CK "
-    f"{result['mitre_id']} ({result['mitre_name']}) "
-    f"under the {result['tactic']} tactic."
-)
+    f"{result['summary']}"
+    )
 
     evidence = collect_evidence(
-        alert["source_ip"]
-    )
+        source_ip=alert["source_ip"],
+        destination_ip=alert["destination_ip"],
+        window_start=alert["window_start"],
+        window_end=alert["window_end"],
+)
 
     return InvestigationResponse(
         alert_type=result["alert_type"],
@@ -179,6 +246,7 @@ def investigate_alert(alert_id: int):
 
         # Keep the original alert count distinct from retrieved evidence.
         connection_count=alert["connection_count"],
+        evidence_connection_count=evidence["connection_count"],
         unique_destinations=evidence["unique_destinations"],
         top_ports=evidence["top_ports"],
         top_destinations=evidence["top_destinations"],

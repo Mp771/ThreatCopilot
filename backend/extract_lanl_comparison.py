@@ -19,6 +19,10 @@ from app.services.ingestion.lanl_comparison import (
     dataset_day,
     dataset_hour,
     prior_positive_contamination_reasons,
+    is_candidate_eligible,
+    is_qualifying_lanl_event,
+    relaxed_profile_key,
+    exact_hour_profile_key,
 )
 
 DATA_DIR = Path("datasets/lanl")
@@ -26,11 +30,160 @@ AUTH_FILE = DATA_DIR / "auth.txt.gz"
 TRAIN_FILE = DATA_DIR / "positive_train.csv"
 TEST_FILE = DATA_DIR / "positive_test.csv"
 SUMMARY_FILE = DATA_DIR / "comparison_audit.json"
+CANDIDATE_CEILING_AUDIT_FILE = (
+    DATA_DIR / "candidate_ceiling_audit.json"
+)
 
 SEED = 42
 TRAIN_RATIO = 1
 TEST_RATIOS = (10, 100, 1000)
 ONE_HOUR = 3600
+
+
+def percentage(numerator, denominator):
+    if denominator == 0:
+        return None
+    return round((numerator / denominator) * 100, 6)
+
+
+class CandidateCeilingAudit:
+    def __init__(self, source_computers, known_relaxed_strata,
+                 known_exact_strata, labelled_line_count=0):
+        self.source_computers = set(source_computers)
+        self.known_relaxed_strata = set(known_relaxed_strata)
+        self.known_exact_strata = set(known_exact_strata)
+        self.labelled_line_count = labelled_line_count
+
+        self.records_scanned = 0
+        self.raw_total = 0
+        self.raw_by_source = defaultdict(int)
+        self.raw_by_day = defaultdict(int)
+        self.raw_by_source_and_day = defaultdict(
+            lambda: defaultdict(int)
+        )
+        self.raw_by_result = defaultdict(int)
+
+        self.unlabelled_total = 0
+        self.unlabelled_relaxed_matches = 0
+        self.unlabelled_exact_matches = 0
+        self.unlabelled_by_result = defaultdict(int)
+
+    def record(self, line_number, fields, labelled_by_line):
+        self.records_scanned += 1
+        timestamp = int(fields[0])
+
+        if not is_qualifying_lanl_event(
+            fields,
+            self.source_computers,
+        ):
+            return
+
+        day = dataset_day(timestamp)
+        source = fields[3]
+        result = fields[8]
+
+        self.raw_total += 1
+        self.raw_by_source[source] += 1
+        self.raw_by_day[day] += 1
+        self.raw_by_source_and_day[source][day] += 1
+        self.raw_by_result[result] += 1
+
+        if line_number in labelled_by_line:
+            return
+
+        self.unlabelled_total += 1
+        self.unlabelled_by_result[result] += 1
+
+        if relaxed_profile_key(fields, timestamp) in (
+            self.known_relaxed_strata
+        ):
+            self.unlabelled_relaxed_matches += 1
+
+        if exact_hour_profile_key(fields, timestamp) in (
+            self.known_exact_strata
+        ):
+            self.unlabelled_exact_matches += 1
+
+    def report(self):
+        additional = (
+            self.unlabelled_relaxed_matches
+            - self.unlabelled_exact_matches
+        )
+
+        return {
+            "status": "completed",
+            "completion_scope": "candidate_discovery_pass",
+            "audit_type": "four_host_candidate_ceiling",
+            "source_computers": sorted(self.source_computers),
+            "qualifying_profile": {
+                "authentication_type": "NTLM",
+                "logon_type": "Network",
+                "orientation": "LogOn",
+                "results": ["Success", "Fail"],
+            },
+            "raw_population": {
+                "total": self.raw_total,
+                "by_source_computer": {
+                    key: self.raw_by_source[key]
+                    for key in sorted(self.raw_by_source)
+                },
+                "by_dataset_day": {
+                    str(key): self.raw_by_day[key]
+                    for key in sorted(self.raw_by_day)
+                },
+                "by_source_computer_and_day": {
+                    source: {
+                        str(day): days[day]
+                        for day in sorted(days)
+                    }
+                    for source, days in sorted(
+                        self.raw_by_source_and_day.items()
+                    )
+                },
+                "by_result": {
+                    key: self.raw_by_result[key]
+                    for key in ("Success", "Fail")
+                    if key in self.raw_by_result
+                },
+            },
+            "unlabelled_population": {
+                "total": self.unlabelled_total,
+                "same_host_day_profile_matches": (
+                    self.unlabelled_relaxed_matches
+                ),
+                "exact_hour_strata_matches": (
+                    self.unlabelled_exact_matches
+                ),
+                "additional_matches_without_hour_restriction": (
+                    additional
+                ),
+                "exact_hour_match_percentage": percentage(
+                    self.unlabelled_exact_matches,
+                    self.unlabelled_relaxed_matches,
+                ),
+                "population_lost_to_hour_restriction_percentage":
+                    percentage(
+                        additional,
+                        self.unlabelled_relaxed_matches,
+                    ),
+                "by_result": {
+                    key: self.unlabelled_by_result[key]
+                    for key in ("Success", "Fail")
+                    if key in self.unlabelled_by_result
+                },
+            },
+            "methodology": {
+                "raw_counts_include_labelled_records": True,
+                "unlabelled_counts_exclude_labelled_lines": True,
+                "contamination_filters_applied": False,
+                "sampling_applied": False,
+                "timestamp_window_applied": False,
+                "matching_tier_redesign_applied": False,
+            },
+            "dataset": str(AUTH_FILE),
+            "records_scanned": self.records_scanned,
+            "labelled_lines": self.labelled_line_count,
+        }
 
 
 def read_csv(path):
@@ -59,6 +212,87 @@ def build_strata(rows):
         counts[matching_key(row)] += 1
 
     return counts
+
+def discover_candidate_entities(
+    auth_file,
+    labelled_by_line,
+    candidate_keys,
+    candidate_ceiling_audit=None,
+):
+    """
+    Discover entities used by unlabelled records matching positive strata.
+
+    This is a lightweight prepass: it stores entity IDs, not full records.
+    """
+    candidate_users = set()
+    candidate_sources = set()
+    candidate_destinations = set()
+
+    records_scanned = 0
+
+    print("Starting candidate entity discovery pass...")
+
+    with gzip.open(auth_file, "rt", encoding="utf-8") as source:
+        for line_number, line in enumerate(source, start=1):
+            fields = line.rstrip("\r\n").split(",")
+
+            if len(fields) != 9:
+                raise ValueError(
+                    f"Invalid record at line {line_number}"
+                )
+
+            records_scanned += 1
+            if candidate_ceiling_audit is not None:
+                candidate_ceiling_audit.record(
+                    line_number,
+                    fields,
+                    labelled_by_line,
+                )
+
+            if records_scanned % 50_000_000 == 0:
+                print(
+                    f"Discovery scanned {records_scanned:,} records | "
+                    f"Candidate users: {len(candidate_users):,} | "
+                    f"Candidate destinations: "
+                    f"{len(candidate_destinations):,}"
+                )
+
+            # Exclude every known exact or probable labelled record.
+            if line_number in labelled_by_line:
+                continue
+
+            timestamp = int(fields[0])
+
+            key = (
+                fields[3],
+                dataset_day(timestamp),
+                dataset_hour(timestamp),
+                fields[5],
+                fields[6],
+                fields[7],
+                fields[8],
+            )
+
+            if key not in candidate_keys:
+                continue
+
+            candidate_users.add(fields[1])
+            candidate_sources.add(fields[3])
+            candidate_destinations.add(fields[4])
+
+    print(
+        "Candidate entity discovery complete: "
+        f"{records_scanned:,} records scanned, "
+        f"{len(candidate_users):,} users, "
+        f"{len(candidate_sources):,} source computers, "
+        f"{len(candidate_destinations):,} destination computers."
+    )
+
+    return (
+        candidate_users,
+        candidate_sources,
+        candidate_destinations,
+    )
 
 def build_positive_history(rows):
     history = {
@@ -130,6 +364,14 @@ def write_controls(path, rows):
 
 
 def main():
+    audit_temp_file = CANDIDATE_CEILING_AUDIT_FILE.with_suffix(
+        ".json.tmp"
+    )
+
+    # Prevent a previous run's report from appearing current.
+    CANDIDATE_CEILING_AUDIT_FILE.unlink(missing_ok=True)
+    audit_temp_file.unlink(missing_ok=True)
+
     print("Loading labelled records and positive partitions...")
 
     labelled_by_line, target_users, target_sources, target_destinations = (
@@ -146,8 +388,39 @@ def main():
             f"train={len(train_positives)}, test={len(test_positives)}"
         )
 
+    positive_source_computers = {
+        row["source_computer"]
+        for row in train_positives + test_positives
+    }
+    if len(positive_source_computers) != 4:
+        raise ValueError(
+            "Expected four unique positive source computers, "
+            f"found {len(positive_source_computers)}: "
+            f"{sorted(positive_source_computers)}"
+        )
+
     train_strata = build_strata(train_positives)
     test_strata = build_strata(test_positives)
+    known_exact_strata = set(train_strata) | set(test_strata)
+
+    known_relaxed_strata = set()
+    for row in train_positives + test_positives:
+        timestamp = int(row["timestamp"])
+        known_relaxed_strata.add((
+            row["source_computer"],
+            dataset_day(timestamp),
+            row["authentication_type"],
+            row["logon_type"],
+            row["orientation"],
+            row["result"],
+        ))
+
+    candidate_ceiling_audit = CandidateCeilingAudit(
+        positive_source_computers,
+        known_relaxed_strata,
+        known_exact_strata,
+        labelled_line_count=len(labelled_by_line),
+    )
 
     # Probable labels are included in contamination checks,
     # but never treated as positive training or test examples.
@@ -183,6 +456,39 @@ def main():
         key: count * max(TEST_RATIOS)
         for key, count in test_strata.items()
     }
+
+    candidate_keys = set(train_quotas) | set(test_quotas)
+
+    (
+        candidate_users,
+        candidate_sources,
+        candidate_destinations,
+    ) = discover_candidate_entities(
+        AUTH_FILE,
+        labelled_by_line,
+        candidate_keys,
+        candidate_ceiling_audit,
+    )
+
+    # Write the completed discovery audit to a temporary file first.
+    with audit_temp_file.open("w", encoding="utf-8") as file:
+        json.dump(candidate_ceiling_audit.report(), file, indent=2)
+        file.write("\n")
+
+    # Publish only after the temporary report has been written.
+    audit_temp_file.replace(CANDIDATE_CEILING_AUDIT_FILE)
+
+    # Track both labelled entities and entities found among candidates.
+    tracked_users = target_users | candidate_users
+    tracked_sources = target_sources | candidate_sources
+    tracked_destinations = target_destinations | candidate_destinations
+
+    print(
+        "Expanded historical tracking sets: "
+        f"{len(tracked_users):,} users, "
+        f"{len(tracked_sources):,} source computers, "
+        f"{len(tracked_destinations):,} destination computers."
+    )
 
     stats = {
         "records_scanned": 0,
@@ -264,13 +570,13 @@ def main():
         engine.update(
             events,
             timestamp,
-            target_users,
-            target_sources,
-            target_destinations,
+            tracked_users,
+            tracked_sources,
+            tracked_destinations,
         )
 
-    print("Starting comparison candidate scan...")
-    print("The compressed authentication archive will be read once.")
+    print("Starting comparison candidate feature extraction pass...")
+    print("The compressed authentication archive will be read for the second time.")
 
     with gzip.open(AUTH_FILE, "rt", encoding="utf-8") as source:
         for line_number, line in enumerate(source, start=1):
@@ -322,9 +628,9 @@ def main():
             # Keep history for the same entity sets used by the
             # original, already-validated feature extractor.
             relevant = (
-                fields[1] in target_users
-                or fields[3] in target_sources
-                or fields[4] in target_destinations
+                fields[1] in tracked_users
+                or fields[3] in tracked_sources
+                or fields[4] in tracked_destinations
             )
 
             if relevant:
@@ -422,13 +728,16 @@ def main():
             # Candidate selection remains unchanged.
             # --------------------------------------------------
 
-            if prior_reasons or simultaneous_reasons:
+            if not is_candidate_eligible(
+                prior_reasons,
+                simultaneous_reasons,
+                untracked_reasons,
+            ):
                 stats["contaminated_candidates"] += 1
                 continue
 
             if untracked_reasons:
                 stats["untracked_entity_candidates"] += 1
-                continue
 
             pending_candidates.append(
                 (line_number, fields, partition, key)
@@ -507,7 +816,35 @@ def main():
         "result",
         ],
         "contamination_window_seconds": ONE_HOUR,
-        "probable_labels_used_as_controls": False,
+
+        "control_policy": {
+            "control_label": "unlabelled_provisional_control",
+            "verified_benign": False,
+            "probable_labels_used_as_controls": False,
+            "prior_positive_contamination": {
+                "enabled": True,
+                "window_seconds": ONE_HOUR,
+                "entity_fields": [
+                    "source_user",
+                    "source_computer",
+                    "destination_computer",
+                ],
+            },
+            "same_timestamp_entity_overlap": {
+                "enabled": True,
+                "entity_fields": [
+                    "source_user",
+                    "source_computer",
+                    "destination_computer",
+                ],
+            },
+            "untracked_entity_policy": (
+                "diagnostic_only_not_a_rejection_condition"
+            ),
+            "historical_feature_tracking": (
+                "positive_and_discovered_candidate_entities"
+            ),
+        },
         "raw_entity_ids_used_as_model_features": False,
         "stats": stats,
         "output_counts": {
